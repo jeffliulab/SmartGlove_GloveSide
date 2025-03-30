@@ -35,13 +35,13 @@ class MPU9250Publisher(Node):
         self.WHO_AM_I     = 0x75
         
         # 初始化I2C总线
-        self.get_logger().info('初始化I2C总线...')
+        self.get_logger().info('INITIALIZE I2C BUS')
         try:
             self.bus = smbus.SMBus(1)  # 树莓派的I2C总线号通常为1
             
             # 检查设备ID
             who_am_i = self.bus.read_byte_data(self.MPU9250_ADDRESS, self.WHO_AM_I)
-            self.get_logger().info(f'设备ID: 0x{who_am_i:02X}')
+            self.get_logger().info(f'DEVICE ID: 0x{who_am_i:02X}')
             
             # 唤醒传感器
             self.bus.write_byte_data(self.MPU9250_ADDRESS, self.PWR_MGMT_1, 0x00)
@@ -54,7 +54,7 @@ class MPU9250Publisher(Node):
             self.bus.write_byte_data(self.MPU9250_ADDRESS, 0x1C, 0x00)
             
         except Exception as e:
-            self.get_logger().error(f'初始化MPU9250失败: {e}')
+            self.get_logger().error(f'INITIALIZE MPU9250 FAILED: {e}')
             raise e
         
         # 创建发布者
@@ -73,7 +73,7 @@ class MPU9250Publisher(Node):
         
         # 创建定时器，50Hz的数据发布频率
         self.timer = self.create_timer(0.02, self.timer_callback)
-        self.get_logger().info('MPU9250发布者已启动！')
+        self.get_logger().info('MPU9250 PUBLISHER START SUCCESSFULLY')
     
     def read_word(self, reg):
         """读取一个16位的字（两个字节）"""
@@ -83,7 +83,7 @@ class MPU9250Publisher(Node):
             value = (high << 8) + low
             return value
         except Exception as e:
-            self.get_logger().error(f'读取数据失败: {e}')
+            self.get_logger().error(f'LOAD DATA FAILED: {e}')
             return 0
     
     def read_word_2c(self, reg):
@@ -135,7 +135,7 @@ class MPU9250Publisher(Node):
                 'temp': temp
             }
         except Exception as e:
-            self.get_logger().error(f'读取传感器数据失败: {e}')
+            self.get_logger().error(f'LOAD DATA FAILED: {e}')
             return None
     
     def update_orientation(self, accel, gyro):
@@ -257,9 +257,9 @@ def main(args=None):
         node = MPU9250Publisher()
         rclpy.spin(node)
     except KeyboardInterrupt:
-        print('用户中断，正在关闭...')
+        print('USER INTERUPT, CLOSING...')
     except Exception as e:
-        print(f'发生错误: {e}')
+        print(f'ERROR: {e}')
     finally:
         if 'node' in locals():
             node.destroy_node()
