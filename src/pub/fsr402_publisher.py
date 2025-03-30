@@ -66,7 +66,7 @@ class FSR402Publisher(Node):
                 # 读取一行数据（等待时间由 timeout 控制）
                 line = self.ser.readline().decode('utf-8').strip()
                 if line:
-                    self.get_logger().info("接收到: " + line)
+                    self.get_logger().info("Reiceive: " + line)
                     self.serial_callback(line)
             except Exception as e:
                 self.get_logger().error("读取串口数据错误: " + str(e))
