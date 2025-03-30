@@ -1,30 +1,87 @@
-# IMPORTANT: THIS FILE SHOULD RUN ON PICO
-# this file should run on pico
-# fsr402 is analog signal, and the signal will send to pico
-# pico will collect analog signal and transfer to digital signal
-# then the digital signal will send through usb to raspberry pi 4b
+#!/usr/bin/env python3
+"""
+FSR402 ROS2 发布者
+通过串口读取 FSR402 的数据（打印格式为 "Force Sensor:  62767"），
+提取出数字部分，并发布到 'force_sensor' 话题上。
+"""
 
-# FIRST STEP: READ THE FORCE SENSOR DATA ON PICO
-from machine import ADC
+import rclpy
+from rclpy.node import Node
+from std_msgs.msg import Int32
+import serial
+import threading
 import time
+import re
 
-fsr = ADC(26) # 3.3V --- FSR402 --- GP26 (PICO ADC0) +++ --- 10k RESIST --- GND
+class FSR402Publisher(Node):
+    def __init__(self):
+        super().__init__('fsr402_publisher')
+        
+        # 尝试打开串口设备
+        try:
+            self.ser = serial.Serial('/dev/ttyACM0', 115200, timeout=1)
+            self.get_logger().info("成功打开串口 /dev/ttyACM0")
+        except Exception as e:
+            self.get_logger().error("打开串口失败: " + str(e))
+            raise e
+        
+        # 创建发布者，发布到 'force_sensor' 话题
+        self.publisher_ = self.create_publisher(Int32, 'force_sensor', 10)
+        
+        # 启动一个独立线程用于读取串口数据
+        self.serial_thread = threading.Thread(target=self.read_serial)
+        self.serial_thread.daemon = True  # 主线程退出时，此线程也会退出
+        self.serial_thread.start()
+        
+        self.get_logger().info("FSR402 发布者已启动。")
+    
+    def serial_callback(self, line: str):
+        """
+        串口数据回调函数：
+        处理读取到的一行数据，提取出数字部分，并发布到 'force_sensor' 话题。
+        预期数据格式: "Force Sensor:  62767"
+        """
+        # 使用正则表达式提取数字
+        match = re.search(r'Force Sensor:\s*(\d+)', line)
+        if match:
+            sensor_value_str = match.group(1)
+            try:
+                sensor_value = int(sensor_value_str)
+                msg = Int32()
+                msg.data = sensor_value
+                self.publisher_.publish(msg)
+                self.get_logger().debug("发布的传感器数值: " + str(sensor_value))
+            except ValueError as e:
+                self.get_logger().error("数字转换失败: " + sensor_value_str)
+        else:
+            self.get_logger().warning("收到的行格式不符: " + line)
+    
+    def read_serial(self):
+        """
+        在一个独立线程中循环读取串口数据，
+        每当读到有效数据时调用 serial_callback 处理。
+        """
+        while rclpy.ok():
+            try:
+                # 读取一行数据（等待时间由 timeout 控制）
+                line = self.ser.readline().decode('utf-8').strip()
+                if line:
+                    self.get_logger().info("接收到: " + line)
+                    self.serial_callback(line)
+            except Exception as e:
+                self.get_logger().error("读取串口数据错误: " + str(e))
+                time.sleep(1)
 
-def read_force():
-    analog_value = fsr.read_u16() # read 0 - 65535 analogue values
-    force = int(analog_value / 65535 * 100 )
-    return force
+def main(args=None):
+    rclpy.init(args=args)
+    node = FSR402Publisher()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        node.get_logger().info("用户中断，关闭 FSR402 发布者")
+    finally:
+        node.destroy_node()
+        rclpy.shutdown()
 
-# SECOND STEP: SEND THROUGH SERIAL PORT
-while True:
-    force = read_force()
-    print(force)
-    time.sleep(0.1)
-
-# THE PRINT INFO WILL OUTPUT ON serial device /ttyACM0
-# The raspberry pi 4b can use screen, minicom, or serial lib (python) to receive these outputs
-
-# NEXT STEP:
-# (1) write main.py on Pico
-# (2) Pico will automatically run main.py once it is connected to Raspberry Pi
-# (3) Read Pico's data on raspberry pi using serial 
+if __name__ == '__main__':
+    main()
